@@ -40,6 +40,10 @@ docker compose up --build
 # API :8000   Prometheus :9090   Grafana :3000 (admin/admin)
 ```
 
+**Web UI:** open http://localhost:8000/ (the same address works under Docker).
+- **Predict tab:** a form with every model input, a *Fill random example* button, the predicted class with probabilities, and buttons to report the real outcome (this calls `/feedback`).
+- **Monitoring tab:** live accuracy vs. offline test, alerts, the predicted-class mix, and per-feature drift (PSI). It uses the same checks as `monitor.py`, over the last 1, 7 or 30 days.
+
 **Call it**
 
 ```bash
@@ -59,6 +63,9 @@ curl -X POST localhost:8000/feedback -H 'content-type: application/json' \
 | `POST /predict` | Batch scoring (up to 1000 rows). Validates the schema and logs every prediction |
 | `POST /feedback` | Attaches ground truth to a past prediction |
 | `GET /metrics` | Prometheus metrics |
+| `GET /` | Web UI |
+| `GET /sample` | Random training row (used by the UI's example button) |
+| `GET /monitoring?days=7` | Drift and live-performance report as JSON |
 
 **Where to host it.** The Docker image runs anywhere containers do: AWS ECS/App Runner, GCP Cloud Run, Azure Container Apps, Kubernetes, Render or Fly.io. For Cloud Run, for example:
 `gcloud run deploy classifier --source . --port 8000`.
