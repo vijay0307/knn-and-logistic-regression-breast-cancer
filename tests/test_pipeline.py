@@ -65,3 +65,11 @@ def test_predict_feedback_monitor(client, env):
     client.post("/predict", json={"records": drifted})
     report = run(env[0], env[1], days=1)
     assert any(a.startswith("Feature drift") for a in report["alerts"])
+
+
+def test_ui_endpoints(client):
+    assert "Classifier Console" in client.get("/").text
+    s = client.get("/sample").json()
+    assert s["actual"] in {"malignant", "benign"} and len(s["features"]) == 30
+    assert client.post("/predict", json={"records": [s["features"]]}).status_code == 200
+    assert "alerts" in client.get("/monitoring?days=1").json()

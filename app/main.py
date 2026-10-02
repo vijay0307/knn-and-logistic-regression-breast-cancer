@@ -6,6 +6,9 @@ Model-serving API (step 2 of deployment).
   POST /predict     {"records": [{feature: value, ...}, ...]} -> predictions
   POST /feedback    {"prediction_id": ..., "actual": ...} -> ground truth arrives later
   GET  /metrics     Prometheus metrics (latency, traffic, errors, class mix)
+  GET  /            web UI: predict form + feedback + monitoring dashboard
+  GET  /sample      a random training row (to prefill the UI form)
+  GET  /monitoring  drift + live-performance report (same as monitoring/monitor.py)
 
 Every prediction is logged (inputs + output + id) to SQLite. The monitoring
 job (monitoring/monitor.py) reads that log to detect data drift and, once
@@ -23,7 +26,8 @@ from typing import Any
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
@@ -39,6 +43,7 @@ CONFIDENCE = Histogram("prediction_confidence", "Max class probability",
 FEEDBACK = Counter("feedback_total", "Ground-truth labels received", ["correct"])
 MODEL_INFO = Gauge("model_info", "Loaded model (value always 1)", ["name", "version"])
 
+STATIC_DIR = Path(__file__).parent / "static"
 state: dict[str, Any] = {}
 
 
@@ -54,9 +59,11 @@ def init_db(db: Path):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     artifact_dir = Path(os.getenv("ARTIFACT_DIR", "artifacts"))
+    state["artifact_dir"] = artifact_dir
     state["db"] = Path(os.getenv("PREDICTION_DB", "data/predictions.db"))
     state["model"] = joblib.load(artifact_dir / "model.joblib")
     state["meta"] = json.loads((artifact_dir / "metadata.json").read_text())
+    state["reference"] = pd.read_csv(artifact_dir / "reference.csv")
     MODEL_INFO.labels(state["meta"]["model_name"], state["meta"]["model_version"]).set(1)
     init_db(state["db"])
     yield
@@ -136,3 +143,22 @@ def feedback(fb: Feedback):
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/", include_in_schema=False)
+def ui():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/sample")
+def sample():
+    """Random training row; `actual` is its true label so the UI can demo /feedback."""
+    row = state["reference"].sample(1).iloc[0]
+    features = {c: (row[c].item() if hasattr(row[c], "item") else row[c]) for c in state["meta"]["features"]}
+    return {"features": features, "actual": state["meta"]["classes"][int(row["__target__"])]}
+
+
+@app.get("/monitoring")
+def monitoring(days: int = Query(7, ge=1, le=365)):
+    from monitoring.monitor import run
+    return run(state["artifact_dir"], state["db"], days)
