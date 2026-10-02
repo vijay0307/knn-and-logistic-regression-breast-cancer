@@ -1,0 +1,7 @@
+.git
+notebooks
+data
+reports
+artifacts
+__pycache__
+*.pyc

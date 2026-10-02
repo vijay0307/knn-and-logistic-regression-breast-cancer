@@ -1,0 +1,11 @@
+# Pin scikit-learn exactly: a joblib model must be loaded with the same version it was trained with.
+scikit-learn==1.9.1
+pandas==3.0.6
+numpy==2.4.6
+scipy==1.17.1
+joblib>=1.4
+fastapi==0.142.2
+uvicorn[standard]==0.50.2
+prometheus-client>=0.21
+pydantic>=2.7
+httpx>=0.27

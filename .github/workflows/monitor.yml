@@ -1,0 +1,19 @@
+# Example scheduled monitoring run. In a real deployment, run monitor.py where it
+# can read the production prediction DB (K8s CronJob, Airflow, cron on the host).
+name: daily-model-monitoring
+on:
+  schedule: [{cron: "17 6 * * *"}]
+  workflow_dispatch:
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    if: ${{ vars.PREDICTION_DB_AVAILABLE == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt
+      - run: python monitoring/monitor.py --days 7 --report reports/monitoring.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: monitoring-report, path: reports/monitoring.json}

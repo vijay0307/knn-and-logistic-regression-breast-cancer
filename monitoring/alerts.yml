@@ -1,0 +1,18 @@
+# Real-time OPERATIONAL alerts (is the service healthy?). Statistical drift and
+# accuracy are checked by monitoring/monitor.py on a schedule instead.
+groups:
+  - name: classifier-api
+    rules:
+      - alert: HighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(predict_latency_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+      - alert: HighErrorRate
+        expr: sum(rate(predict_requests_total{status!="ok"}[5m])) / sum(rate(predict_requests_total[5m])) > 0.05
+        for: 5m
+      - alert: LowModelConfidence
+        # median max-probability falling = model sees inputs unlike its training data
+        expr: histogram_quantile(0.5, sum(rate(prediction_confidence_bucket[1h])) by (le)) < 0.7
+        for: 30m
+      - alert: ApiDown
+        expr: up{job="classifier-api"} == 0
+        for: 1m
