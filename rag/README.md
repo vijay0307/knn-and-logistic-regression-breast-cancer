@@ -83,7 +83,20 @@ gcloud run deploy rag-chatbot --source . --port 8100 \
 
 **Scaling note:** the rate limiter is in memory, so each replica counts on its own. With several replicas, move it to Redis or to your API gateway.
 
-## 3. Evaluate: is it good?
+### Host it on Hugging Face Spaces (free, gives you a shareable link)
+
+Run this on your own machine. It creates the Space, uploads the app and stores your keys as encrypted Space secrets:
+
+```bash
+pip install -U huggingface_hub anthropic
+hf auth login                                   # paste a Hugging Face token with write access
+export ANTHROPIC_API_KEY=sk-ant-...
+python deploy/huggingface/deploy.py --public    # leave out --public to keep the Space private
+```
+
+It prints the chat link (`https://<user>-breast-cancer-docs-chatbot.hf.space/`), the dashboard link (`…/dashboard`), and the access key to type into the key box. Even a public Space requires that key for chat and metrics, so share it only with people you trust, and change it with `--access-key NEW_KEY`. On Spaces the usage and feedback logs reset when the Space restarts. To keep them, enable Persistent Storage and set `RAG_EVENTS_DB` and `RAG_FEEDBACK_LOG` to paths under `/data`.
+
+
 
 ```bash
 python -m rag.evaluate --offline   # free and deterministic: retrieval + guardrails

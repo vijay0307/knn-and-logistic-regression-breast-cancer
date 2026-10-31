@@ -17,7 +17,9 @@ from rag.retriever import BM25Index, Chunk, load_corpus
 
 log = logging.getLogger("rag")
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCES = [ROOT / "rag" / "knowledge", ROOT / "README.md"]
+# RAG_SOURCES: comma-separated files/folders to index (default: rag/knowledge + the repo README)
+DEFAULT_SOURCES = ([Path(p) for p in os.environ["RAG_SOURCES"].split(",") if p.strip()]
+                   if os.getenv("RAG_SOURCES") else [ROOT / "rag" / "knowledge", ROOT / "README.md"])
 
 MODEL = os.getenv("RAG_MODEL", "claude-opus-5-5")
 EFFORT = os.getenv("RAG_EFFORT", "low")  # chat Q&A rarely benefits from deep thinking
