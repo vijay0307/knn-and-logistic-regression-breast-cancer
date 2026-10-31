@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metrics Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg:#f4f4f2; --surface:#fcfcfb; --border:#e4e3df; --grid:#ecebe7;
+    --text:#0b0b0b; --text-2:#52514e; --muted:#7a7974; --accent:#2a78d6;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --good:#0ca30c; --good-text:#006300; --warning:#fab219; --critical:#d03b3b; --critical-text:#b02a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg:#121211; --surface:#1a1a19; --border:#2f2f2c; --grid:#262624;
+      --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --accent:#3987e5;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --good-text:#5fd35f; --critical-text:#f08a8a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:#121211; --surface:#1a1a19; --border:#2f2f2c; --grid:#262624;
+    --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --accent:#3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --good-text:#5fd35f; --critical-text:#f08a8a;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:16px; }
+  header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  h1 { font-size:20px; margin:0; } h2 { font-size:16px; margin:28px 0 10px; } h3 { font-size:13px; margin:0 0 8px; color:var(--text-2); font-weight:600; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  input, select, button { font:inherit; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:6px 10px; }
+  button { cursor:pointer; }
+  .sub { color:var(--muted); font-size:12px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+  .tile { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; }
+  .tile .label { color:var(--text-2); font-size:12px; }
+  .tile .value { font-size:24px; font-weight:600; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .tile .hint { color:var(--muted); font-size:12px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:12px; margin-top:12px; }
+  .card.wide { grid-column:1 / -1; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px; min-width:0; }
+  .legend { display:flex; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--text-2); margin-bottom:6px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  svg { display:block; width:100%; height:auto; overflow:visible; }
+  svg text { fill:var(--muted); font-size:11px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--grid); vertical-align:top; }
+  th { color:var(--text-2); font-weight:600; } td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .table-wrap { overflow-x:auto; }
+  .pill { display:inline-flex; gap:4px; align-items:center; font-size:12px; font-weight:600; white-space:nowrap; }
+  .pill.pass { color:var(--good-text); } .pill.fail { color:var(--critical-text); } .pill.na { color:var(--muted); }
+  .pill::before { content:""; width:8px; height:8px; border-radius:50%; background:currentColor; }
+  .pill.pass::before { background:var(--good); } .pill.fail::before { background:var(--critical); }
+  details.tv { margin-top:6px; font-size:12px; color:var(--text-2); } details.tv summary { cursor:pointer; }
+  .empty { color:var(--muted); font-size:13px; padding:20px 0; text-align:center; }
+  .alert { border-left:3px solid var(--critical); padding:6px 10px; margin:4px 0; background:var(--bg); border-radius:4px; }
+  .neg { border-top:1px solid var(--grid); padding:8px 0; } .neg:first-child { border-top:0; }
+  .neg .q { font-weight:600; } .neg .a { color:var(--text-2); white-space:pre-wrap; }
+  #tip { position:fixed; pointer-events:none; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.15); display:none; z-index:10; max-width:260px; }
+  #tip b { font-variant-numeric:tabular-nums; }
+  #err { color:var(--critical-text); margin:8px 0; }
+  nav a { color:var(--accent); font-size:13px; margin-right:12px; text-decoration:none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Metrics dashboard</h1>
+      <div class="sub" id="meta">Docs chatbot and classifier</div>
+    </div>
+    <div class="controls">
+      <select id="days" aria-label="Time window">
+        <option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option>
+      </select>
+      <input id="key" type="password" placeholder="API key" autocomplete="off" aria-label="API key">
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+  <nav><a href="#usage">Usage</a><a href="#quality">Quality &amp; security</a><a href="#feedback">Feedback</a><a href="#classifier">Classifier</a><a href="/">Open chat</a></nav>
+  <div id="err" role="alert"></div>
+
+  <h2 id="usage">Chatbot usage</h2>
+  <div class="tiles" id="usageTiles"></div>
+  <div class="grid2">
+    <div class="card"><h3>Requests by outcome</h3><div id="reqChart"></div></div>
+    <div class="card"><h3>Latency (answered requests)</h3><div id="latChart"></div></div>
+    <div class="card"><h3 id="costTitle">Estimated Claude cost</h3><div id="costChart"></div></div>
+    <div class="card"><h3>Outcome breakdown</h3><div id="outcomeTable"></div></div>
+  </div>
+
+  <h2 id="quality">Quality &amp; security (latest evaluation)</h2>
+  <div class="tiles" id="evalTiles"></div>
+  <div class="grid2">
+    <div class="card"><h3>Every metric vs. its threshold</h3><div id="evalTable"></div></div>
+    <div class="card"><h3>Evaluation trend (rates, 0–1)</h3><div id="evalTrend"></div></div>
+    <div class="card"><h3>Red-team results</h3><div id="redteam"></div></div>
+    <div class="card"><h3>Weak answers and retrieval misses</h3><div id="weak"></div></div>
+  </div>
+
+  <h2 id="feedback">User feedback</h2>
+  <div class="tiles" id="fbTiles"></div>
+  <div class="grid2"><div class="card"><h3>Recent 👎 answers</h3><div id="negList"></div></div></div>
+
+  <h2 id="classifier">Classifier (breast-cancer model)</h2>
+  <div id="clfBody"></div>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+// All server-provided text is inserted with textContent (never innerHTML) to prevent XSS.
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SVGNS = 'http://www.w3.org/2000/svg';
+const tip = $('tip');
+function el(tag, attrs = {}, text) { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; }
+function sv(tag, attrs = {}) { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+const fmt = {
+  int: v => v == null ? '–' : Math.round(v).toLocaleString(),
+  pct: v => v == null ? '–' : (v * 100).toFixed(v >= 0.995 || v === 0 ? 0 : 1) + '%',
+  ms: v => v == null ? '–' : v >= 1000 ? (v / 1000).toFixed(1) + ' s' : Math.round(v) + ' ms',
+  usd: v => v == null ? '–' : v < 0.01 && v > 0 ? '$' + v.toFixed(4) : '$' + v.toFixed(2),
+  num: v => v == null ? '–' : Number.isInteger(v) ? String(v) : v.toFixed(3),
+};
+function showTip(evt, lines) {
+  tip.replaceChildren(...lines.map(([label, value, color]) => {
+    const row = el('div'); if (color) { const sw = el('span'); sw.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:${color}`; row.append(sw); }
+    row.append(label + (value != null ? ': ' : '')); if (value != null) row.append(el('b', {}, value)); return row; }));
+  tip.style.display = 'block';
+  const x = Math.min(evt.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(evt.clientY + 14, innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => tip.style.display = 'none';
+function tile(label, value, hint) { const t = el('div', {class: 'tile'}); t.append(el('div', {class: 'label'}, label), el('div', {class: 'value'}, value)); if (hint) t.append(el('div', {class: 'hint'}, hint)); return t; }
+function legend(items) { const l = el('div', {class: 'legend'}); for (const [name, color] of items) { const s = el('span'); const i = el('i'); i.style.background = color; s.append(i, name); l.append(s); } return l; }
+function table(headers, rows, numericCols = []) {
+  const w = el('div', {class: 'table-wrap'}), t = el('table'), tr = el('tr');
+  headers.forEach((h, i) => tr.append(el('th', numericCols.includes(i) ? {class: 'num'} : {}, h)));
+  const th = el('thead'); th.append(tr); t.append(th); const tb = el('tbody');
+  for (const r of rows) { const row = el('tr'); r.forEach((c, i) => { const td = el('td', numericCols.includes(i) ? {class: 'num'} : {}); c instanceof Node ? td.append(c) : td.textContent = c; row.append(td); }); tb.append(row); }
+  t.append(tb); w.append(t); return w;
+}
+function tableView(headers, rows, numericCols) { const d = el('details', {class: 'tv'}); d.append(el('summary', {}, 'View as table'), table(headers, rows, numericCols)); return d; }
+function pill(ok) { return el('span', {class: 'pill ' + (ok == null ? 'na' : ok ? 'pass' : 'fail')}, ok == null ? 'Not run' : ok ? 'Pass' : 'Fail'); }
+function tlabel(t, bucket) { const d = new Date(t * 1000); return bucket === 'hour' ? d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : d.toLocaleDateString([], {month: 'short', day: 'numeric'}); }
+function niceMax(v) { if (!v) return 1; const p = 10 ** Math.floor(Math.log10(v)), n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+
+const W = 560, H = 220, M = {l: 44, r: 12, t: 8, b: 26};
+function axes(svg, maxY, labels, yfmt) {
+  const ih = H - M.t - M.b;
+  for (let i = 0; i <= 4; i++) {
+    const y = M.t + ih - ih * i / 4;
+    svg.append(sv('line', {x1: M.l, x2: W - M.r, y1: y, y2: y, stroke: css('--grid'), 'stroke-width': 1}));
+    const t = sv('text', {x: M.l - 6, y: y + 4, 'text-anchor': 'end'}); t.textContent = yfmt(maxY * i / 4); svg.append(t);
+  }
+  const iw = W - M.l - M.r, every = Math.max(1, Math.ceil(labels.length / 7));
+  labels.forEach((lab, i) => { if (i % every) return; const x = M.l + iw * (i + 0.5) / labels.length; const t = sv('text', {x, y: H - 8, 'text-anchor': 'middle'}); t.textContent = lab; svg.append(t); });
+}
+
+// Stacked bars: series = [[key, name, color]]
+function stackedBars(container, data, series, labels, yfmt = fmt.int, tipfmt = fmt.int) {
+  container.replaceChildren();
+  const totals = data.map(d => series.reduce((s, [k]) => s + (d[k] || 0), 0));
+  if (!totals.some(Boolean)) { container.append(el('div', {class: 'empty'}, 'No data in this window yet.')); return; }
+  if (series.length > 1) container.append(legend(series.map(([, n, c]) => [n, c])));
+  const svg = sv('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img'}), maxY = niceMax(Math.max(...totals));
+  axes(svg, maxY, labels, yfmt);
+  const ih = H - M.t - M.b, iw = W - M.l - M.r, slot = iw / data.length, bw = Math.max(2, Math.min(28, slot * 0.7));
+  data.forEach((d, i) => {
+    const x = M.l + slot * i + (slot - bw) / 2; let y0 = M.t + ih; const segs = series.filter(([k]) => d[k] > 0);
+    segs.forEach(([k, , color], j) => {
+      const h = ih * d[k] / maxY, top = j === segs.length - 1;
+      const yBase = y0 - (j > 0 ? 2 : 0);  // 2px surface gap between stacked segments
+      const yTop = Math.min(y0 - h, yBase - 1);
+      const r = top ? Math.min(4, bw / 2, yBase - yTop) : 0;  // rounded data-end on the top segment only
+      const p = `M${x},${yBase} V${yTop + r} Q${x},${yTop} ${x + r},${yTop} H${x + bw - r} Q${x + bw},${yTop} ${x + bw},${yTop + r} V${yBase} Z`;
+      svg.append(sv('path', {d: p, fill: color}));
+      y0 -= h;
+    });
+    const hit = sv('rect', {x: M.l + slot * i, y: M.t, width: slot, height: ih, fill: 'transparent'});
+    hit.addEventListener('mousemove', e => showTip(e, [[labels[i], null], ...series.map(([k, n, c]) => [n, tipfmt(d[k] || 0), series.length > 1 ? c : null])]));
+    hit.addEventListener('mouseleave', hideTip); svg.append(hit);
+  });
+  container.append(svg);
+  container.append(tableView(['Time', ...series.map(s => s[1])], data.map((d, i) => [labels[i], ...series.map(([k]) => tipfmt(d[k] || 0))]), series.map((_, i) => i + 1)));
+}
+
+// Line chart with crosshair: series = [[key, name, color]]
+function lineChart(container, data, series, labels, yfmt, maxYfixed) {
+  container.replaceChildren();
+  const vals = data.flatMap(d => series.map(([k]) => d[k])).filter(v => v != null);
+  if (!vals.length) { container.append(el('div', {class: 'empty'}, 'No data in this window yet.')); return; }
+  if (series.length > 1) container.append(legend(series.map(([, n, c]) => [n, c])));
+  const svg = sv('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img'}), maxY = maxYfixed || niceMax(Math.max(...vals));
+  axes(svg, maxY, labels, yfmt);
+  const ih = H - M.t - M.b, iw = W - M.l - M.r, X = i => M.l + iw * (i + 0.5) / data.length, Y = v => M.t + ih - ih * v / maxY;
+  for (const [k, , color] of series) {
+    let d = '', pen = false;
+    data.forEach((row, i) => { const v = row[k]; if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ',' + Y(v); pen = true; });
+    svg.append(sv('path', {d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'}));
+    data.forEach((row, i) => { if (row[k] != null && (data.length < 40)) svg.append(sv('circle', {cx: X(i), cy: Y(row[k]), r: 4, fill: color, stroke: css('--surface'), 'stroke-width': 2})); });
+  }
+  const cross = sv('line', {y1: M.t, y2: M.t + ih, stroke: css('--muted'), 'stroke-width': 1, 'stroke-dasharray': '3 3', visibility: 'hidden'});
+  svg.append(cross);
+  const hit = sv('rect', {x: M.l, y: M.t, width: iw, height: ih, fill: 'transparent'});
+  hit.addEventListener('mousemove', e => {
+    const r = svg.getBoundingClientRect(), xv = (e.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(data.length - 1, Math.round((xv - M.l) / iw * data.length - 0.5)));
+    cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('visibility', 'visible');
+    showTip(e, [[labels[i], null], ...series.map(([k, n, c]) => [n, data[i][k] == null ? '–' : yfmt(data[i][k]), c])]);
+  });
+  hit.addEventListener('mouseleave', () => { hideTip(); cross.setAttribute('visibility', 'hidden'); });
+  svg.append(hit); container.append(svg);
+  container.append(tableView(['Time', ...series.map(s => s[1])], data.map((d, i) => [labels[i], ...series.map(([k]) => d[k] == null ? '–' : yfmt(d[k]))]), series.map((_, i) => i + 1)));
+}
+
+// Horizontal bars with a threshold rule (single series)
+function hbars(container, items, threshold, color, valfmt) {
+  container.replaceChildren();
+  if (!items.length) { container.append(el('div', {class: 'empty'}, 'No data.')); return; }
+  const rowH = 22, h = items.length * rowH + 24, lw = 170, w = W, maxV = niceMax(Math.max(threshold * 1.2, ...items.map(i => i[1])));
+  const svg = sv('svg', {viewBox: `0 0 ${w} ${h}`, role: 'img'}), iw = w - lw - 50, X = v => lw + iw * v / maxV;
+  items.forEach(([name, v], i) => {
+    const y = 4 + i * rowH, t = sv('text', {x: lw - 8, y: y + 13, 'text-anchor': 'end'}); t.textContent = name.length > 26 ? name.slice(0, 25) + '…' : name; svg.append(t);
+    const bw = Math.max(1, X(v) - lw), r = Math.min(4, bw);
+    svg.append(sv('path', {d: `M${lw},${y + 2} H${lw + bw - r} Q${lw + bw},${y + 2} ${lw + bw},${y + 2 + r} V${y + 16 - r} Q${lw + bw},${y + 16} ${lw + bw - r},${y + 16} H${lw} Z`, fill: color}));
+    const vt = sv('text', {x: lw + bw + 6, y: y + 13}); vt.textContent = valfmt(v); svg.append(vt);
+    const hit = sv('rect', {x: 0, y, width: w, height: rowH, fill: 'transparent'});
+    hit.addEventListener('mousemove', e => showTip(e, [[name, valfmt(v)], ['Alert threshold', valfmt(threshold)]])); hit.addEventListener('mouseleave', hideTip); svg.append(hit);
+  });
+  svg.append(sv('line', {x1: X(threshold), x2: X(threshold), y1: 0, y2: h - 18, stroke: css('--critical'), 'stroke-width': 1.5, 'stroke-dasharray': '4 3'}));
+  const tt = sv('text', {x: X(threshold), y: h - 4, 'text-anchor': 'middle'}); tt.textContent = 'alert > ' + valfmt(threshold); svg.append(tt);
+  container.append(svg);
+}
+
+const METRIC_NAMES = {
+  'retrieval.hit_rate': 'Retrieval hit rate @k', 'retrieval.mrr': 'Retrieval MRR', 'guard.block_rate': 'Injection block rate',
+  'guard.false_positive': 'Guardrail false positives', 'e2e.answer_rate': 'Answer rate (in-scope)', 'e2e.keyword_recall': 'Required facts present',
+  'e2e.citation_precision': 'Citation precision', 'e2e.correctness': 'Correctness (judge, 1–5)', 'e2e.faithfulness': 'Faithfulness (judge, 1–5)',
+  'redteam.pass_rate': 'Red-team pass rate', 'injection.indirect_pass': 'Indirect injection resisted'};
+const isScore = k => k.startsWith('e2e.correctness') || k.startsWith('e2e.faithfulness');
+const mfmt = (k, v) => v == null ? '–' : isScore(k) ? v.toFixed(2) : fmt.pct(v);
+
+function render(d) {
+  const s = d.service, t = s.totals, labels = s.series.map(x => tlabel(x.t, s.bucket));
+  $('meta').textContent = `Model ${d.model} · updated ${new Date(d.generated_at * 1000).toLocaleTimeString()} · auto-refreshes every 30 s`;
+
+  $('usageTiles').replaceChildren(
+    tile('Requests', fmt.int(t.requests), `last ${d.window_days} day${d.window_days > 1 ? 's' : ''}`),
+    tile('Answered', fmt.pct(t.answer_rate), `${fmt.int(t.answered)} with sources`),
+    tile('"I don\'t know"', fmt.pct(t.requests ? t.no_answer / t.requests : null), 'not covered by the docs'),
+    tile('Blocked', fmt.pct(t.block_rate), `${fmt.int(t.blocked)} injection / refusal`),
+    tile('Errors', fmt.pct(t.error_rate), `${fmt.int(t.error)} upstream / internal`),
+    tile('Latency p50', fmt.ms(t.p50_ms), 'answered requests'),
+    tile('Latency p95', fmt.ms(t.p95_ms), 'answered requests'),
+    tile('Claude cost', fmt.usd(t.cost_usd), `${fmt.int(t.input_tokens + t.output_tokens)} tokens`),
+    tile('Cost per answer', fmt.usd(t.cost_per_answer_usd), 'per model call'),
+    tile('Avg. citations', t.avg_citations == null ? '–' : t.avg_citations.toFixed(1), 'per answered question'));
+
+  stackedBars($('reqChart'), s.series, [['answered', 'Answered', css('--s1')], ['no_answer', "Don't know", css('--s2')], ['blocked', 'Blocked', css('--s3')], ['error', 'Error', css('--s4')]], labels);
+  lineChart($('latChart'), s.series, [['p50', 'p50', css('--s1')], ['p95', 'p95', css('--s2')]], labels, fmt.ms);
+  $('costTitle').textContent = `Estimated Claude cost ($${d.pricing.input_per_mtok} / $${d.pricing.output_per_mtok} per M tokens in / out)`;
+  stackedBars($('costChart'), s.series, [['cost', 'Cost', css('--s1')]], labels, v => '$' + (v < 1 ? v.toFixed(2) : v.toFixed(0)), fmt.usd);
+  const oc = Object.entries(s.outcomes);
+  $('outcomeTable').replaceChildren(oc.length ? table(['Outcome', 'Requests', 'Share'], oc.map(([k, v]) => [k, fmt.int(v), fmt.pct(v / t.requests)]), [1, 2]) : el('div', {class: 'empty'}, 'No requests yet.'));
+
+  // Evaluation
+  const ev = d.evaluation, rows = ev.metrics, ran = rows.filter(r => r.pass != null);
+  const failing = ran.filter(r => !r.pass).length;
+  const lastRun = Math.max(0, ...rows.map(r => r.measured_at || 0));
+  const g = k => rows.find(r => r.metric === k)?.value;
+  $('evalTiles').replaceChildren(
+    tile('Gate status', !ran.length ? 'Not run' : failing ? `${failing} failing` : ran.length < rows.length ? 'Passing' : 'All passing',
+         ran.length < rows.length ? `${rows.length - ran.length} of ${rows.length} not run yet` : `all ${rows.length} metrics measured`),
+    tile('Retrieval hit rate', mfmt('x', g('retrieval.hit_rate')), 'right doc in top 4'),
+    tile('Correctness', mfmt('e2e.correctness', g('e2e.correctness')), 'judge score / 5'),
+    tile('Faithfulness', mfmt('e2e.faithfulness', g('e2e.faithfulness')), 'no hallucination, / 5'),
+    tile('Red-team pass', mfmt('x', g('redteam.pass_rate')), 'attacks handled safely'),
+    tile('Last evaluated', lastRun ? new Date(lastRun * 1000).toLocaleDateString() : '–', 'python -m rag.evaluate'));
+  $('evalTable').replaceChildren(table(['Metric', 'Value', 'Threshold', 'Status'],
+    rows.map(r => [METRIC_NAMES[r.metric] || r.metric, mfmt(r.metric, r.value), (r.direction === 'max' ? '≤ ' : '≥ ') + mfmt(r.metric, r.threshold), pill(r.pass)]), [1, 2]));
+  const trendKeys = [['retrieval.hit_rate', 'Retrieval hit rate', css('--s1')], ['e2e.keyword_recall', 'Facts present', css('--s2')], ['redteam.pass_rate', 'Red-team pass', css('--s3')], ['e2e.answer_rate', 'Answer rate', css('--s4')]];
+  const hist = ev.history.map(h => Object.fromEntries([['t', h.ts], ...trendKeys.map(([k]) => [k, h.metrics[k] ?? null])]));
+  const presentKeys = trendKeys.filter(([k]) => hist.some(h => h[k] != null));
+  if (hist.length < 2) $('evalTrend').replaceChildren(el('div', {class: 'empty'}, 'Run the evaluation at least twice to see a trend.'));
+  else lineChart($('evalTrend'), hist, presentKeys, hist.map(h => new Date(h.t * 1000).toLocaleDateString([], {month: 'short', day: 'numeric'})), fmt.pct, 1);
+  const rt = ev.details.redteam || [];
+  $('redteam').replaceChildren(rt.length ? table(['Attack', 'Category', 'Result', 'Why'], rt.map(r => [r.id, r.category, pill(r.pass), r.why])) : el('div', {class: 'empty'}, 'Run the full evaluation (needs ANTHROPIC_API_KEY) to see red-team results.'));
+  const weak = [...(ev.details.e2e_failures || []).map(f => [f.id, `correctness ${f.correctness}, faithfulness ${f.faithfulness}`, f.reason || '']),
+                ...(ev.details.retrieval_misses || []).map(m => [m.id, 'retrieval miss', 'got: ' + m.got.join(', ')])];
+  $('weak').replaceChildren(weak.length ? table(['Question', 'Problem', 'Detail'], weak) : el('div', {class: 'empty'}, rt.length ? 'None. Every golden question scored ≥ 4.' : 'Nothing flagged in the latest run.'));
+
+  // Feedback
+  const fb = d.feedback;
+  $('fbTiles').replaceChildren(tile('👍 Helpful', fmt.int(fb.up)), tile('👎 Not helpful', fmt.int(fb.down)), tile('Satisfaction', fmt.pct(fb.satisfaction), 'share of 👍'));
+  $('negList').replaceChildren(...(fb.recent_negative.length ? fb.recent_negative.map(n => {
+    const b = el('div', {class: 'neg'}); b.append(el('div', {class: 'sub'}, new Date(n.ts * 1000).toLocaleString()), el('div', {class: 'q'}, n.question), el('div', {class: 'a'}, n.answer));
+    if (n.comment) b.append(el('div', {class: 'sub'}, 'Comment: ' + n.comment)); return b; }) : [el('div', {class: 'empty'}, 'No negative feedback in this window.')]));
+
+  renderClassifier(d.classifier);
+}
+
+function renderClassifier(c) {
+  const body = $('clfBody');
+  if (!c.configured) { body.replaceChildren(el('div', {class: 'card empty'}, 'Set CLASSIFIER_URL (e.g. http://api:8000) on the chatbot service to show the classifier\'s metrics here.')); return; }
+  if (c.error) { const card = el('div', {class: 'card'}); card.append(el('div', {class: 'alert'}, c.error)); body.replaceChildren(card); return; }
+  const m = c.model || {}, mon = c.monitoring || {}, perf = mon.performance || {}, test = m.test_metrics || {};
+  const tiles = el('div', {class: 'tiles'});
+  tiles.append(tile('Model', m.model_name || '–', 'version ' + (m.model_version || '–')),
+    tile('Predictions', fmt.int(mon.n_predictions), `last ${mon.window_days} days`),
+    tile('Mean confidence', fmt.pct(mon.mean_confidence), 'alert when median < 70%'),
+    tile('Labelled (feedback)', fmt.int(perf.n_labelled), 'ground truth received'),
+    tile('Drifted features', fmt.pct(mon.drifted_feature_share), 'PSI > 0.25'),
+    tile('Active alerts', fmt.int((mon.alerts || []).length), (mon.alerts || []).length ? 'see below' : 'all clear'));
+  const grid = el('div', {class: 'grid2'});
+  const perfCard = el('div', {class: 'card'}); perfCard.append(el('h3', {}, 'Offline test vs. live performance'));
+  const keys = Object.keys(test);
+  perfCard.append(keys.length ? table(['Metric', 'Offline test', 'Live', 'Change'], keys.map(k => { const lv = perf.live?.[k]; return [k, fmt.num(test[k]), lv == null ? '–' : fmt.num(lv), lv == null ? '–' : (lv - test[k] >= 0 ? '+' : '') + (lv - test[k]).toFixed(3)]; }), [1, 2, 3]) : el('div', {class: 'empty'}, 'No model metadata.'));
+  if (perf.note) perfCard.append(el('div', {class: 'sub'}, perf.note));
+  const mixCard = el('div', {class: 'card'}); mixCard.append(el('h3', {}, 'Predicted-class mix vs. training'));
+  const pd = Object.entries(mon.prediction_drift || {});
+  mixCard.append(pd.length ? table(['Class', 'Training share', 'Live share', 'Shift'], pd.map(([k, v]) => [k, fmt.pct(v.train_share), fmt.pct(v.live_share), ((v.live_share - v.train_share) * 100).toFixed(1) + ' pts']), [1, 2, 3]) : el('div', {class: 'empty'}, mon.note || 'No predictions yet.'));
+  const driftCard = el('div', {class: 'card wide'}); driftCard.append(el('h3', {}, 'Feature drift (PSI), top 12'));
+  const drift = el('div'); driftCard.append(drift);
+  const alertCard = el('div', {class: 'card'}); alertCard.append(el('h3', {}, 'Alerts'));
+  (mon.alerts || []).length ? mon.alerts.forEach(a => alertCard.append(el('div', {class: 'alert'}, a))) : alertCard.append(el('div', {class: 'empty'}, mon.note || 'No alerts in this window.'));
+  grid.append(perfCard, mixCard, driftCard, alertCard);
+  body.replaceChildren(tiles, grid);
+  hbars(drift, Object.entries(mon.feature_drift || {}).map(([k, v]) => [k, v.psi]).sort((a, b) => b[1] - a[1]).slice(0, 12), 0.25, css('--s1'), v => v.toFixed(2));
+}
+
+let timer;
+async function load() {
+  $('err').textContent = '';
+  try {
+    const r = await fetch('/dashboard/data?days=' + $('days').value, {headers: {authorization: 'Bearer ' + $('key').value}});
+    if (r.status === 401) { $('err').textContent = 'Enter a valid API key (one of RAG_API_KEYS) to load metrics.'; return; }
+    if (!r.ok) { $('err').textContent = 'Could not load metrics (HTTP ' + r.status + ').'; return; }
+    var data = await r.json();
+  } catch { $('err').textContent = 'Network error while loading metrics.'; return; }
+  try { render(data); } catch (e) { console.error(e); $('err').textContent = 'Could not draw part of the dashboard: ' + e.message; }
+}
+try { $('key').value = sessionStorage.getItem('rag_key') || ''; $('days').value = localStorage.getItem('rag_dash_days') || '7'; } catch {}
+$('key').addEventListener('change', () => { try { sessionStorage.setItem('rag_key', $('key').value); } catch {} load(); });
+$('days').addEventListener('change', () => { try { localStorage.setItem('rag_dash_days', $('days').value); } catch {} load(); });
+$('refresh').addEventListener('click', load);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', load);
+load(); timer = setInterval(load, 30000);
+</script>
+</body>
+</html>

@@ -119,6 +119,8 @@ ANTHROPIC_API_KEY=sk-ant-... RAG_API_KEYS=change-me uvicorn rag.server:app --por
 python -m rag.evaluate --offline                                                         # quality and security gate
 ```
 
+All metrics, for both the chatbot and the classifier, are on one page at http://localhost:8100/dashboard.
+
 ## Tests
 
 ```bash

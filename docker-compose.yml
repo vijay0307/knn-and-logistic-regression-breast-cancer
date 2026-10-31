@@ -13,7 +13,8 @@ services:
     build: {context: ., dockerfile: Dockerfile.rag}
     ports: ["8100:8100"]
     env_file: [.env]                       # ANTHROPIC_API_KEY=..., RAG_API_KEYS=... (never commit .env)
-    volumes: ["./data:/srv/data"]
+    environment: {CLASSIFIER_URL: "http://api:8000", RAG_REPORT_DIR: /srv/reports}   # dashboard pulls classifier metrics
+    volumes: ["./data:/srv/data", "./reports:/srv/reports:ro"]   # eval reports feed /dashboard
     read_only: true
     tmpfs: ["/tmp"]
     security_opt: ["no-new-privileges:true"]

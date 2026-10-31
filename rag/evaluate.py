@@ -24,6 +24,7 @@ import os
 import statistics
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import anthropic
@@ -160,8 +161,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--offline", action="store_true", help="skip tests that call the Claude API")
     ap.add_argument("--k", type=int, default=4)
-    ap.add_argument("--report", default="reports/rag_eval.json")
+    ap.add_argument("--report", default=None, help="default: reports/rag_eval.json, or rag_eval_offline.json with --offline")
     args = ap.parse_args()
+    args.report = args.report or f"reports/rag_eval{'_offline' if args.offline else ''}.json"
 
     golden, redteam = load("golden.jsonl"), load("redteam.jsonl")
     metrics, details = {}, {}
@@ -185,6 +187,9 @@ def main():
 
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps({"metrics": metrics, "failed": failed, "details": details}, indent=2))
+    with (Path(args.report).parent / "rag_eval_history.jsonl").open("a") as f:  # trend data for /dashboard
+        f.write(json.dumps({"ts": time.time(), "mode": "offline" if args.offline else "full",
+                            "metrics": metrics, "failed": failed}) + "\n")
     print(f"\nreport: {args.report}")
     if failed:
         print("FAILED:", ", ".join(failed))

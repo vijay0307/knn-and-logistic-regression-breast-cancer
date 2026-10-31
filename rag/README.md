@@ -113,7 +113,26 @@ Current offline results: retrieval hit rate 1.00, MRR 0.98, block rate 1.00, fal
 - The `RagHighNoAnswerRate` alert means users are asking about things the docs don't cover. Add that content to `rag/knowledge/`.
 - Re-run the full eval before changing the model, the prompt, `RAG_TOP_K` or the knowledge base.
 
-## 4. Security: what's covered
+## Dashboard: every metric in one place
+
+Open **http://localhost:8100/dashboard** and enter one of your `RAG_API_KEYS` (the metrics endpoint needs a key, like `/chat`). Choose a window of 24 hours, 7, 30 or 90 days. The page refreshes every 30 seconds.
+
+| Section | What it shows | Source |
+|---|---|---|
+| **Chatbot usage** | Requests, answer / "I don't know" / blocked / error rates, p50 and p95 latency, Claude tokens and estimated cost, cost per answer, citations per answer; charts of requests by outcome, latency and cost over time | `data/rag_events.db`: one row per request, holding no question text |
+| **Quality & security** | Every evaluation metric next to its threshold with pass / fail / not run, a trend across eval runs, red-team results, and weak answers or retrieval misses | `reports/rag_eval*.json` and `reports/rag_eval_history.jsonl`, written by `python -m rag.evaluate` |
+| **User feedback** | 👍 / 👎 counts, satisfaction rate, and the latest 👎 answers so you can fix them | `data/rag_feedback.jsonl` |
+| **Classifier** | Model and version, prediction volume, confidence, offline vs. live accuracy / precision / recall / F1, predicted-class drift, per-feature PSI drift, and active alerts | The classifier API (`/model-info`, `/monitoring`) when `CLASSIFIER_URL` is set |
+
+Under Docker Compose, `CLASSIFIER_URL` and the reports folder are already wired up. Locally, start the classifier API on port 8000 and then run:
+
+```bash
+CLASSIFIER_URL=http://localhost:8000 RAG_API_KEYS=change-me uvicorn rag.server:app --port 8100
+```
+
+Cost is estimated at `RAG_PRICE_IN` / `RAG_PRICE_OUT` USD per million tokens (default 4 / 20, the `claude-opus-5-5` list price). Change them if you switch models. The same request counters also go to Prometheus at `/metrics`, for Grafana and alerting.
+
+
 
 | Threat | Defence |
 |---|---|

@@ -9,10 +9,14 @@ Env vars
   RAG_RATE_LIMIT      requests per minute per client (default 20)
   RAG_ENV             "production" disables /docs and /openapi.json
   RAG_FEEDBACK_LOG    where 👍/👎 feedback is appended (default data/rag_feedback.jsonl)
+  RAG_EVENTS_DB       SQLite log of every chat request for the dashboard (default data/rag_events.db)
+  RAG_REPORT_DIR      where evaluate.py writes its reports (default reports)
+  CLASSIFIER_URL      e.g. http://api:8000 - adds the classifier's metrics to /dashboard
 """
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import hmac
 import json
 import logging
@@ -30,6 +34,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
+from rag import dashboard
 from rag.chatbot import RAGChatbot
 from rag.guardrails import MAX_HISTORY_TURNS, MAX_QUESTION_CHARS, redact_pii
 
@@ -41,6 +46,7 @@ ALLOW_NO_AUTH = os.getenv("RAG_ALLOW_NO_AUTH") == "1"
 RATE_LIMIT = int(os.getenv("RAG_RATE_LIMIT", "20"))
 PROD = os.getenv("RAG_ENV", "").lower() == "production"
 FEEDBACK_LOG = Path(os.getenv("RAG_FEEDBACK_LOG", "data/rag_feedback.jsonl"))
+EVENTS_DB = Path(os.getenv("RAG_EVENTS_DB", "data/rag_events.db"))
 STATIC = Path(__file__).parent / "static"
 
 REG = CollectorRegistry()
@@ -128,6 +134,20 @@ class FeedbackRequest(BaseModel):
     comment: str = Field("", max_length=1000)
 
 
+def record_event(outcome: str, latency_ms: int, usage: dict | None = None, n_citations: int = 0):
+    """Durable, PII-free request log (no question text) that feeds /dashboard."""
+    usage = usage or {}
+    try:
+        EVENTS_DB.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(EVENTS_DB, timeout=5) as con:
+            con.execute(dashboard.EVENTS_SCHEMA)
+            con.execute("INSERT INTO events VALUES (?,?,?,?,?,?)",
+                        (time.time(), outcome, latency_ms, usage.get("input_tokens", 0),
+                         usage.get("output_tokens", 0), n_citations))
+    except sqlite3.Error:
+        log.exception("could not record event")
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -146,22 +166,28 @@ def metrics():
 @app.post("/chat")
 def chat(req: ChatRequest, client_id: str = Depends(authenticate), bot: RAGChatbot = Depends(get_bot)):
     rid = uuid.uuid4().hex
+    t0 = time.perf_counter()
+    elapsed = lambda: int((time.perf_counter() - t0) * 1000)  # noqa: E731
     with LAT.time():
         try:
             r = bot.ask(req.question, [t.model_dump() for t in req.history])
         except anthropic.RateLimitError:
             REQS.labels("upstream_rate_limited").inc()
+            record_event("upstream_rate_limited", elapsed())
             raise HTTPException(503, "model is busy, retry shortly", headers={"Retry-After": "30"})
         except (anthropic.APIConnectionError, anthropic.APIStatusError) as e:
             REQS.labels("upstream_error").inc()
+            record_event("upstream_error", elapsed())
             log.error("anthropic error rid=%s type=%s", rid, type(e).__name__)
             raise HTTPException(502, "upstream model error")
         except Exception as e:  # e.g. missing ANTHROPIC_API_KEY; never leak internals to clients
             REQS.labels("internal_error").inc()
+            record_event("internal_error", elapsed())
             log.exception("chat failed rid=%s type=%s", rid, type(e).__name__)
             raise HTTPException(503, "chat backend unavailable")
     outcome = r.blocked or ("answered" if r.answerable else "no_answer")
     REQS.labels(outcome).inc()
+    record_event(outcome, elapsed(), r.usage, len(r.citations))
     for k, v in r.usage.items():
         TOKENS.labels(k).inc(v)
     # never log raw user text: redact PII and truncate
@@ -182,3 +208,15 @@ def feedback(fb: FeedbackRequest, client_id: str = Depends(authenticate)):
     with _lock, FEEDBACK_LOG.open("a") as f:
         f.write(json.dumps(rec) + "\n")
     return {"ok": True}
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard_page():
+    return FileResponse(STATIC / "dashboard.html")
+
+
+@app.get("/dashboard/data")
+def dashboard_data(days: int = 7, client_id: str = Depends(authenticate)):
+    days = max(1, min(days, 90))
+    return dashboard.collect(EVENTS_DB, FEEDBACK_LOG, Path(os.getenv("RAG_REPORT_DIR", "reports")),
+                             days, os.getenv("CLASSIFIER_URL"))
