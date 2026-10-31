@@ -109,6 +109,16 @@ python monitoring/monitor.py --days 1                      # PSI alerts, maligna
 
 > **Medical note:** in this dataset, missing a *malignant* tumour (a false negative) costs far more than a false alarm. When choosing or tuning a model, put recall on the malignant class first and consider lowering its decision threshold. Don't rely on accuracy alone.
 
+## 4. Docs chatbot (RAG)
+
+`rag/` contains a retrieval-augmented chatbot that answers questions about this project (the dataset, KNN and logistic regression, metrics, deployment and monitoring) from the docs only, with citations. It has API-key auth, rate limiting, prompt-injection guardrails, an evaluation suite that works as a CI gate, and its own Docker image. See [`rag/README.md`](rag/README.md).
+
+```bash
+pip install -r requirements-rag.txt
+ANTHROPIC_API_KEY=sk-ant-... RAG_API_KEYS=change-me uvicorn rag.server:app --port 8100   # UI at http://localhost:8100
+python -m rag.evaluate --offline                                                         # quality and security gate
+```
+
 ## Tests
 
 ```bash

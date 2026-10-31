@@ -16,3 +16,22 @@ groups:
       - alert: ApiDown
         expr: up{job="classifier-api"} == 0
         for: 1m
+  - name: rag-chatbot
+    rules:
+      - alert: RagDown
+        expr: up{job="rag-chatbot"} == 0
+        for: 1m
+      - alert: RagUpstreamErrors
+        expr: sum(rate(rag_requests_total{outcome=~"upstream_error|upstream_rate_limited|internal_error"}[5m])) / sum(rate(rag_requests_total[5m])) > 0.05
+        for: 5m
+      - alert: RagInjectionSpike
+        # sudden burst of blocked prompts = someone probing the bot
+        expr: sum(rate(rag_requests_total{outcome="prompt_injection"}[10m])) * 600 > 20
+        for: 5m
+      - alert: RagHighNoAnswerRate
+        # bot says "I don't know" a lot = docs are missing content users need
+        expr: sum(rate(rag_requests_total{outcome="no_answer"}[1h])) / sum(rate(rag_requests_total[1h])) > 0.3
+        for: 1h
+      - alert: RagNegativeFeedback
+        expr: sum(increase(rag_feedback_total{rating="down"}[1d])) / sum(increase(rag_feedback_total[1d])) > 0.3
+        for: 1h

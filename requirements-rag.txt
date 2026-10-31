@@ -1,0 +1,6 @@
+# RAG chatbot service (rag/). Independent of the classifier's scikit-learn pins.
+anthropic>=2.3,<3
+fastapi>=0.142
+uvicorn[standard]>=0.50
+pydantic>=2.7
+prometheus-client>=0.21

@@ -5,3 +5,4 @@ artifacts/
 data/
 reports/
 *.joblib
+.env

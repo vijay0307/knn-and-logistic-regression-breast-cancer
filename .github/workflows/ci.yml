@@ -10,3 +10,27 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: pytest -q
       - run: docker build -t classifier-api .
+
+  rag:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements-rag.txt pytest
+      - run: pytest -q tests/test_rag.py
+      # Free, deterministic gate: retrieval quality + input guardrails.
+      - run: python -m rag.evaluate --offline --report reports/rag_eval_offline.json
+      # Full gate (LLM answers, judge, red team, indirect injection). Runs only when the
+      # repository has an ANTHROPIC_API_KEY secret, and never on PRs from forks.
+      - name: End-to-end eval
+        if: ${{ github.event_name == 'push' && env.ANTHROPIC_API_KEY != '' }}
+        run: python -m rag.evaluate --report reports/rag_eval.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: rag-eval, path: reports/}
+      - run: docker build -f Dockerfile.rag -t rag-chatbot .
+      # Dependency vulnerability scan
+      - run: pip install pip-audit && pip-audit -r requirements-rag.txt

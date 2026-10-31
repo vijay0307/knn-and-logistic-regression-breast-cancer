@@ -1,0 +1,16 @@
+# RAG chatbot image:  docker build -f Dockerfile.rag -t rag-chatbot .
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /srv
+COPY requirements-rag.txt .
+RUN pip install --no-cache-dir -r requirements-rag.txt
+COPY README.md ./
+COPY rag ./rag
+# Run as an unprivileged user; only the feedback log directory is writable.
+RUN useradd --uid 10001 --no-create-home app && mkdir -p /srv/data && chown app /srv/data
+USER app
+ENV RAG_ENV=production RAG_FEEDBACK_LOG=/srv/data/rag_feedback.jsonl
+EXPOSE 8100
+HEALTHCHECK CMD python -c "import urllib.request;urllib.request.urlopen('http://localhost:8100/health')"
+# Secrets (ANTHROPIC_API_KEY, RAG_API_KEYS) come from the runtime environment / secret manager, never the image.
+CMD ["uvicorn", "rag.server:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "2", "--proxy-headers"]
